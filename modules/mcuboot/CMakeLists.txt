@@ -930,6 +930,25 @@ if(CONFIG_ZIGBEE AND CONFIG_ZIGBEE_FOTA)
   )
 endif(CONFIG_ZIGBEE AND CONFIG_ZIGBEE_FOTA)
 
+if(CONFIG_MCUBOOT_SPLIT_IMAGE)
+  set(firmware_binary "${PROJECT_BINARY_DIR}/${app_core_binary_name}")
+  set(split_image_dir "${CMAKE_CURRENT_BINARY_DIR}/split_image")
+  file(MAKE_DIRECTORY ${split_image_dir})
+
+  add_custom_target(split_image ALL
+    COMMAND
+    ${PYTHON_EXECUTABLE}
+      ${ZEPHYR_NRF_MODULE_DIR}/scripts/bootloader/divide_image.py
+      --application ${firmware_binary}
+      --version-string ${CONFIG_MCUBOOT_SPLIT_IMAGE_VERSION}
+      --max-block-size ${CONFIG_MCUBOOT_SPLIT_IMAGE_MAX_BLOCK_SIZE}
+      --out-directory ${split_image_dir}
+
+    DEPENDS
+    ${firmware_binary}
+  )
+endif(CONFIG_MCUBOOT_SPLIT_IMAGE)
+
 # Zephyr has a Kconfig option used for signing an application image
 # with MCUboot using west sign. If partition manager is in use and
 # there are multiple images, we want to make sure users understand

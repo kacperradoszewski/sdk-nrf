@@ -142,6 +142,26 @@ config MCUBOOT_USE_ALL_AVAILABLE_RAM
 	  may allow secrets to be leaked to non-secure through the non-secure
 	  RAM partition.
 
+config MCUBOOT_SPLIT_IMAGE
+	bool "Split application image"
+	help
+	  Split the resulting executable into a number of blocks to conform with
+	  the SoftBank FOTA framework.
+
+config MCUBOOT_SPLIT_IMAGE_MAX_BLOCK_SIZE
+	int "Split image maximum block size"
+	range 1 100
+	default 100
+	help
+	  Size of blocks in kilobytes that the executable is going to be split
+	  into.
+
+config MCUBOOT_SPLIT_IMAGE_VERSION
+	string "Image version"
+	default "Version"
+	help
+	  Version to be reported in the image blocks.
+
 endmenu
 
 config XIP_SPLIT_IMAGE
