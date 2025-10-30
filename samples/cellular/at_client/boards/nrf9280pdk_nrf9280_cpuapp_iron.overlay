@@ -1,0 +1,6 @@
+/ {
+	/* Specify uart to use for at_host */
+	chosen {
+		ncs,at-host-uart = &uart136;
+	};
+};
