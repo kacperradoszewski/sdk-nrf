@@ -42,6 +42,41 @@ BUILD_ASSERT(S0_ADDRESS != S1_ADDRESS);
 
 LOG_MODULE_REGISTER(fota_download, CONFIG_FOTA_DOWNLOAD_LOG_LEVEL);
 
+/* SM-316): make the cancel-during-write race reproducible.
+ *
+ * The bug is most likely a race between two threads:
+ *   - the cancel thread, running fota_download_cancel()
+ *   - the downloader thread, writing a fragment in downloader_callback()
+ * It only occurs when dfu_target_done() (which closes the modem DFU session)
+ * runs while a fragment write is still in progress.
+ *
+ * To trigger it on demand, the two threads are synchronized:
+ *   1. fota_download_cancel() asks the downloader to hold the next fragment
+ *      (hold_next_fragment) and waits for it (fragment_held). This is
+ *      done before dl_cancel() so the downloader is still delivering fragments.
+ *   2. The next fragment in downloader_callback() sees the request, signals
+ *      that it is now holding the fragment, and sleeps for
+ *      FOTA_DOWNLOAD_CANCEL_RACE_WAIT_MS before calling dfu_target_write().
+ *   3. While the downloader sleeps, the cancel thread calls dfu_target_done().
+ *      The held fragment then writes into a session that was just closed.
+ */
+#define FOTA_DOWNLOAD_CANCEL_RACE 1
+#define FOTA_DOWNLOAD_CANCEL_RACE_WAIT_MS 1000
+/* 1 = original code, dfu_target_done() runs before waiting for
+ * the downloader to stop, which reproduces the SM-316 race. 0 = fixed ordering,
+ * dfu_target_done() runs only after the downloader has stopped (the write then
+ * succeeds, so this should also verify the fix).
+ */
+#define FOTA_DOWNLOAD_CANCEL_RACE_BUGGY 1
+#if FOTA_DOWNLOAD_CANCEL_RACE
+/* Given by the downloader thread once it is holding a fragment; taken by the
+ * cancel thread, which waits for it.
+ */
+static K_SEM_DEFINE(fragment_held, 0, 1);
+/* Set by the cancel thread to ask the downloader to hold the next fragment. */
+static atomic_t hold_next_fragment;
+#endif
+
 static fota_download_callback_t callback;
 static const char *dl_host;
 static const char *dl_file;
@@ -271,6 +306,19 @@ static int downloader_callback(const struct downloader_evt *event)
 			}
 		}
 
+#if FOTA_DOWNLOAD_CANCEL_RACE
+		/* If the cancel thread asked us to hold the next fragment, tell it
+		 * we are now holding this one and sleep, so it runs dfu_target_done()
+		 * before the dfu_target_write() below.
+		 */
+		if (atomic_cas(&hold_next_fragment, 1, 0)) {
+			LOG_WRN("holding fragment (%u bytes) before write, waiting for cancel",
+				event->fragment.len);
+			k_sem_give(&fragment_held);
+			k_msleep(FOTA_DOWNLOAD_CANCEL_RACE_WAIT_MS);
+			LOG_WRN("writing held fragment now");
+		}
+#endif
 		err = dfu_target_write(event->fragment.buf, event->fragment.len);
 		if (err && err == -EINVAL) {
 			LOG_INF("Image refused");
@@ -766,12 +814,28 @@ int fota_download_cancel(void)
 
 	atomic_set_bit(&flags, FLAG_CANCEL);
 
+#if FOTA_DOWNLOAD_CANCEL_RACE
+	/* Ask the downloader to hold the next fragment, then wait until it does.
+	 * Reset the semaphore first to drop any leftover signal. This runs before
+	 * dl_cancel() so the downloader is still running and will deliver one more
+	 * fragment.
+	 */
+	k_sem_reset(&fragment_held);
+	atomic_set(&hold_next_fragment, 1);
+	(void)k_sem_take(&fragment_held, K_SECONDS(10));
+#endif
+
 	err = dl_cancel();
 	if (err) {
 		LOG_ERR("%s failed to stop download: %d", __func__, err);
 		return err;
 	}
 
+#if FOTA_DOWNLOAD_CANCEL_RACE_BUGGY
+	/* Original ordering. Close the DFU session before the downloader
+	 * has stopped, so the held fragment's write races it.
+	 */
+	LOG_WRN("closing DFU session before downloader stopped");
 	err = dfu_target_done(false);
 	if (err && err != -EACCES) {
 		LOG_ERR("%s failed to clean up: %d", __func__, err);
@@ -780,6 +844,18 @@ int fota_download_cancel(void)
 	while (atomic_test_bit(&flags, FLAG_DOWNLOADING)) {
 		k_msleep(10);
 	}
+#else
+	/* Wait for the downloader to stop, only then close the DFU session. */
+	while (atomic_test_bit(&flags, FLAG_DOWNLOADING)) {
+		k_msleep(10);
+	}
+
+	err = dfu_target_done(false);
+	if (err && err != -EACCES) {
+		LOG_ERR("%s failed to clean up: %d", __func__, err);
+	}
+#endif
+
 	return err;
 }
 
