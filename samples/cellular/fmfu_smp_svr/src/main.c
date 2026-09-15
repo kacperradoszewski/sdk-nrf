@@ -13,7 +13,9 @@
 
 int main(void)
 {
-	int err = nrf_modem_lib_init();
+	int err;
+#if defined(CONFIG_SOC_SERIES_NRF91)
+	err = nrf_modem_lib_init();
 
 	if (err == 0) {
 		char modem_version[MODEM_INFO_MAX_RESPONSE_SIZE];
@@ -31,7 +33,12 @@ int main(void)
 	}
 	/* Shutdown modem to prepare for DFU */
 	nrf_modem_lib_shutdown();
-
+#elif defined(CONFIG_SOC_SERIES_NRF92)
+	/* On nRF92 the cellcore cannot be re-booted into the IPC DFU service after a normal
+	 * boot (cpuconf is cold-boot-only), so go straight to bootloader mode from reset.
+	 */
+	printk("Starting modem mgmt sample (nRF92, bootloader mode from cold boot)\n\r");
+#endif
 	nrf_modem_lib_bootloader_init();
 	/* Register SMP Communication stats */
 	fmfu_mgmt_stat_init();
