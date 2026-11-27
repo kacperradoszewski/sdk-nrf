@@ -24,6 +24,9 @@
 BUILD_ASSERT(DCACHE_LINE_SIZE == 32,
 	     "Unexpected data cache line size " STRINGIFY(DCACHE_LINE_SIZE) ", expected 32");
 
+/** Marker requesting cellcore to apply a scheduled delta update. */
+#define CELLCORE_DELTA_DFU_MARKER 0x544C4544
+
 /** IronSide SE boot report local domain context for cellcore. */
 struct boot_report_cellcore_ldc {
 	uint32_t ipc_buf_addr;
@@ -121,7 +124,8 @@ uintptr_t nrf_modem_os_rpc_sigdev_modem_get(void)
 	return (uintptr_t)modem_bellboard;
 }
 
-static int cellcore_boot(uint32_t ipc_buf_addr, uint32_t ipc_buf_size, uint32_t loader_addr)
+static int cellcore_boot(uint32_t ipc_buf_addr, uint32_t ipc_buf_size, uint32_t loader_addr,
+			 uint32_t rfu)
 {
 	/* Cpuconf called only on cold boot */
 	if (ironside_se_cellcore_is_booted) {
@@ -132,7 +136,7 @@ static int cellcore_boot(uint32_t ipc_buf_addr, uint32_t ipc_buf_size, uint32_t 
 	params.ipc_buf_addr = ipc_buf_addr;
 	params.ipc_buf_size = ipc_buf_size;
 	params.loader_addr = loader_addr;
-	params.rfu = 0;
+	params.rfu = rfu;
 
 	uint8_t *msg = (uint8_t *)&params;
 	size_t msg_size = sizeof(params);
@@ -151,12 +155,19 @@ static int cellcore_boot(uint32_t ipc_buf_addr, uint32_t ipc_buf_size, uint32_t 
 int nrf_modem_os_rpc_cellcore_boot(void)
 {
 	return cellcore_boot(DT_REG_ADDR(DT_NODELABEL(cpuapp_cpucell_ipc_shm_ctrl)),
-			     DT_REG_SIZE(DT_NODELABEL(cpuapp_cpucell_ipc_shm_ctrl)), 0);
+			     DT_REG_SIZE(DT_NODELABEL(cpuapp_cpucell_ipc_shm_ctrl)), 0, 0);
 }
 
 int nrf_modem_os_rpc_cellcore_boot_bootloader(uint32_t loader_addr)
 {
-	return cellcore_boot(loader_addr, NRF_MODEM_SHMEM_BOOTLOADER_SIZE, loader_addr);
+	return cellcore_boot(loader_addr, NRF_MODEM_SHMEM_BOOTLOADER_SIZE, loader_addr, 0);
+}
+
+int nrf_modem_os_rpc_cellcore_boot_delta_dfu(uint32_t pkg_addr)
+{
+	return cellcore_boot(DT_REG_ADDR(DT_NODELABEL(cpuapp_cpucell_ipc_shm_ctrl)),
+			     DT_REG_SIZE(DT_NODELABEL(cpuapp_cpucell_ipc_shm_ctrl)), pkg_addr,
+			     CELLCORE_DELTA_DFU_MARKER);
 }
 
 static inline void pbuf_configure(struct pbuf_cfg *pb_cfg, uintptr_t mem_addr, size_t size)

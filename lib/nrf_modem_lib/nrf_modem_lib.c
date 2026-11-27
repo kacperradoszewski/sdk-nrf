@@ -76,6 +76,9 @@ static const struct nrf_modem_init_params init_params = {
 #endif
 	.fault_handler = nrf_modem_fault_handler,
 	.dfu_handler = nrf_modem_lib_dfu_handler,
+#if CONFIG_SOC_SERIES_NRF92 && DT_HAS_CHOSEN(nordic_dfu_partition)
+	.delta_dfu_pkg_addr = DT_MAPPED_PARTITION_ADDR(DT_CHOSEN(nordic_dfu_partition)),
+#endif
 };
 
 BUILD_ASSERT(
