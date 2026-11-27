@@ -28,6 +28,7 @@
 		zephyr,wifi = &cpuapp_wifi;
 		nrf,bootloader-request = &boot_request;
 		nrf,bootloader-request-backup = &boot_request_backup;
+		nordic,dfu-partition = &dfu_partition;
 	};
 
 	aliases {
