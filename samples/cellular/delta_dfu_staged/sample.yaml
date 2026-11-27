@@ -1,0 +1,12 @@
+sample:
+  name: Staged modem delta update test
+tests:
+  sample.cellular.delta_dfu_staged:
+    sysbuild: true
+    build_only: true
+    integration_platforms:
+      - nrf9251dk/nrf9251/cpuapp
+    platform_allow:
+      - nrf9251dk/nrf9251/cpuapp
+    tags:
+      - sysbuild
