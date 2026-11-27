@@ -87,14 +87,41 @@ config DFU_TARGET_STREAM_SYNCHRONOUS
 	  Note this option can only be used if the chunks passed to dfu_target_stream_write
 	  have always the size aligned to the flash write block size.
 
+# Workaround for not being able to have commas in macro arguments
+DT_CHOSEN_NORDIC_DFU_PARTITION := nordic,dfu-partition
+
+config DFU_TARGET_DFU_PARTITION
+	bool
+	depends on $(dt_chosen_enabled,$(DT_CHOSEN_NORDIC_DFU_PARTITION))
+	depends on FLASH
+	select STREAM_FLASH
+	select DFU_TARGET_STREAM
+	help
+	  Selected by the DFU targets that write their image to the partition
+	  set as the ``nordic,dfu-partition`` chosen property in devicetree.
+	  The partition is shared by these targets, one at a time.
+
+config DFU_TARGET_DFU_PARTITION_BUF_SIZE
+	int "DFU partition write buffer size"
+	default 512
+	depends on DFU_TARGET_DFU_PARTITION
+	help
+	  Size of the buffer used to write the image to the DFU partition.
+	  It must be a multiple of the write block size of the partition's
+	  flash device.
+
 config DFU_TARGET_MODEM_DELTA
 	bool "Modem delta update support"
-	default y
-	depends on SOC_SERIES_NRF91
+	default y if SOC_SERIES_NRF91 || SOC_SERIES_NRF92
+	depends on SOC_SERIES_NRF91 || \
+		   ($(dt_chosen_enabled,$(DT_CHOSEN_NORDIC_DFU_PARTITION)) && FLASH)
+	select DFU_TARGET_DFU_PARTITION if !SOC_SERIES_NRF91
 	help
 	  Enable support for updates to the modem firmware.
+	  On nRF91 Series devices, the modem stores the update.
+	  On other devices, the update is written to the DFU partition.
 
-if (DFU_TARGET_MODEM_DELTA)
+if (DFU_TARGET_MODEM_DELTA && SOC_SERIES_NRF91)
 
 config DFU_TARGET_MODEM_TIMEOUT
 	int "Erase pending timeout"
@@ -109,7 +136,7 @@ config DFU_TARGET_MODEM_TIMEOUT
 	  so that the modem has time to service the delta DFU erase request.
 	  It's also possible to reboot the device to achieve the same behavior.
 
-endif # DFU_TARGET_MODEM_DELTA
+endif # DFU_TARGET_MODEM_DELTA && SOC_SERIES_NRF91
 
 config DFU_TARGET_FULL_MODEM
 	bool "Full Modem update support"

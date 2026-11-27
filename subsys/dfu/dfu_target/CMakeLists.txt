@@ -14,9 +14,16 @@ zephyr_library_sources(
 zephyr_library_sources_ifdef(CONFIG_DFU_TARGET_STREAM
   src/dfu_target_stream.c
 )
-zephyr_library_sources_ifdef(CONFIG_DFU_TARGET_MODEM_DELTA
-  src/dfu_target_modem_delta.c
+zephyr_library_sources_ifdef(CONFIG_DFU_TARGET_DFU_PARTITION
+  src/dfu_partition.c
 )
+if(CONFIG_DFU_TARGET_MODEM_DELTA)
+  if(CONFIG_SOC_SERIES_NRF91)
+    zephyr_library_sources(src/dfu_target_modem_delta.c)
+  else()
+    zephyr_library_sources(src/dfu_target_modem_delta_partition.c)
+  endif()
+endif()
 zephyr_library_sources_ifdef(CONFIG_DFU_TARGET_FULL_MODEM
   src/dfu_target_full_modem.c
 )

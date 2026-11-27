@@ -128,10 +128,12 @@ int dfu_target_init(int img_type, int img_num, size_t file_size, dfu_target_call
 	 * or initializes the same target for a different image.
 	 * Avoid re-initializing generally to ensure that the download can
 	 * continue where it left off. Re-initializing is required for
-	 * modem_delta upgrades to re-open the DFU socket that is closed on
-	 * abort and to change the image number.
+	 * modem_delta upgrades on nRF91 Series devices to re-open the DFU socket
+	 * that is closed on abort and to change the image number.
 	 */
-	if (new_target == current_target && img_type != DFU_TARGET_IMAGE_TYPE_MODEM_DELTA &&
+	if (new_target == current_target &&
+	    !(IS_ENABLED(CONFIG_SOC_SERIES_NRF91) &&
+	      img_type == DFU_TARGET_IMAGE_TYPE_MODEM_DELTA) &&
 	    img_type != DFU_TARGET_IMAGE_TYPE_SMP && current_img_num == img_num) {
 		return 0;
 	}
